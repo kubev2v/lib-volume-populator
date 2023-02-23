@@ -460,6 +460,24 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 		// We'll get called again later when the data source exists
 		return nil
 	}
+	var rawBlock bool
+	if nil != pvc.Spec.VolumeMode && corev1.PersistentVolumeBlock == *pvc.Spec.VolumeMode {
+		rawBlock = true
+	}
+
+	// Calculate the args for the populator pod
+	var args []string
+	args, err = c.populatorArgs(rawBlock, unstructured)
+	if err != nil {
+		return err
+	}
+
+	// Overriding the namespace to our target namespace
+	for _, val := range args {
+		if strings.HasPrefix(val, "--cr-namespace=") {
+			c.populatorNamespace = strings.Split(val, "--cr-namespace=")[1]
+		}
+	}
 
 	var waitForFirstConsumer bool
 	var nodeName string
@@ -530,18 +548,6 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 
 		// If the pod doesn't exist yet, create it
 		if pod == nil {
-			var rawBlock bool
-			if nil != pvc.Spec.VolumeMode && corev1.PersistentVolumeBlock == *pvc.Spec.VolumeMode {
-				rawBlock = true
-			}
-
-			// Calculate the args for the populator pod
-			var args []string
-			args, err = c.populatorArgs(rawBlock, unstructured)
-			if err != nil {
-				return err
-			}
-
 			// Make the pod
 			pod = &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
