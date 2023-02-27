@@ -422,11 +422,6 @@ func (c *controller) runWorker() {
 }
 
 func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName string) error {
-	if c.populatorNamespace == pvcNamespace {
-		// Ignore PVCs in our own working namespace
-		return nil
-	}
-
 	var err error
 
 	var pvc *corev1.PersistentVolumeClaim
@@ -473,9 +468,13 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 	}
 
 	// Overriding the namespace to our target namespace
+	// Taking the secret name from the args
+	var secretName string
 	for _, val := range args {
 		if strings.HasPrefix(val, "--cr-namespace=") {
 			c.populatorNamespace = strings.Split(val, "--cr-namespace=")[1]
+		} else if strings.HasPrefix(val, "--secret-name=") {
+			secretName = strings.Split(val, "--secret-name=")[1]
 		}
 	}
 
@@ -554,7 +553,7 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 					Name:      podName,
 					Namespace: c.populatorNamespace,
 				},
-				Spec: makePopulatePodSpec(pvcPrimeName),
+				Spec: makePopulatePodSpec(pvcPrimeName, secretName),
 			}
 			pod.Spec.Volumes[0].VolumeSource.PersistentVolumeClaim.ClaimName = pvcPrimeName
 			con := &pod.Spec.Containers[0]
@@ -575,6 +574,11 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 					},
 				}
 			}
+			con.VolumeMounts = append(con.VolumeMounts, corev1.VolumeMount{
+				Name:      "secret-volume",
+				ReadOnly:  true,
+				MountPath: "/etc/secret-volume",
+			})
 			if waitForFirstConsumer {
 				pod.Spec.NodeName = nodeName
 			}
@@ -722,13 +726,27 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 	return nil
 }
 
-func makePopulatePodSpec(pvcPrimeName string) corev1.PodSpec {
+func makePopulatePodSpec(pvcPrimeName, secretName string) corev1.PodSpec {
+	nonRoot := true
+	allowPrivilageEscalation := false
+	user := int64(1000)
 	return corev1.PodSpec{
-		ServiceAccountName: "forklift-controller",
+		//ServiceAccountName: "forklift-controller",
 		Containers: []corev1.Container{
 			{
 				Name:            populatorContainerName,
 				ImagePullPolicy: corev1.PullIfNotPresent,
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: &allowPrivilageEscalation,
+					RunAsNonRoot:             &nonRoot,
+					RunAsUser:                &user,
+					SeccompProfile: &corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					},
+					Capabilities: &corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				},
 			},
 		},
 		RestartPolicy: corev1.RestartPolicyNever,
@@ -738,6 +756,14 @@ func makePopulatePodSpec(pvcPrimeName string) corev1.PodSpec {
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: pvcPrimeName,
+					},
+				},
+			},
+			{
+				Name: "secret-volume",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: secretName,
 					},
 				},
 			},
