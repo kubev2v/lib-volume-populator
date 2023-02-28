@@ -731,7 +731,6 @@ func makePopulatePodSpec(pvcPrimeName, secretName string) corev1.PodSpec {
 	allowPrivilageEscalation := false
 	user := int64(1000)
 	return corev1.PodSpec{
-		//ServiceAccountName: "forklift-controller",
 		Containers: []corev1.Container{
 			{
 				Name:            populatorContainerName,
