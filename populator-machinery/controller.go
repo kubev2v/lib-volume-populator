@@ -727,25 +727,11 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 }
 
 func makePopulatePodSpec(pvcPrimeName, secretName string) corev1.PodSpec {
-	nonRoot := true
-	allowPrivilageEscalation := false
-	user := int64(1000)
 	return corev1.PodSpec{
 		Containers: []corev1.Container{
 			{
 				Name:            populatorContainerName,
 				ImagePullPolicy: corev1.PullIfNotPresent,
-				SecurityContext: &corev1.SecurityContext{
-					AllowPrivilegeEscalation: &allowPrivilageEscalation,
-					RunAsNonRoot:             &nonRoot,
-					RunAsUser:                &user,
-					SeccompProfile: &corev1.SeccompProfile{
-						Type: corev1.SeccompProfileTypeRuntimeDefault,
-					},
-					Capabilities: &corev1.Capabilities{
-						Drop: []corev1.Capability{"ALL"},
-					},
-				},
 			},
 		},
 		RestartPolicy: corev1.RestartPolicyNever,
