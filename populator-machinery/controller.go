@@ -460,15 +460,13 @@ func (c *controller) syncPvc(ctx context.Context, key, pvcNamespace, pvcName str
 		rawBlock = true
 	}
 
-	// Calculate the args for the populator pod
-	var args []string
-	args, err = c.populatorArgs(rawBlock, unstructured)
+	// Set the args for the populator pod
+	args, err := c.populatorArgs(rawBlock, unstructured)
 	if err != nil {
 		return err
 	}
 
 	// Overriding the namespace to our target namespace
-	// Taking the secret name from the args
 	var secretName string
 	for _, val := range args {
 		if strings.HasPrefix(val, "--cr-namespace=") {
